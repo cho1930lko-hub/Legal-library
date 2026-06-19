@@ -49,10 +49,14 @@ st.markdown("""
 # ── Helper: load JSON data ────────────────────────────
 @st.cache_data
 def load_bns_data():
-    if not Path(BNS_JSON).exists():
-        return []
-    with open(BNS_JSON, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        for p in [BNS_JSON, Path(__file__).parent/"data"/"bns_sections.json"]:
+            if Path(p).exists():
+                with open(p, encoding="utf-8") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+    return []
 
 @st.cache_data
 def load_case_laws():
