@@ -49,7 +49,7 @@ AI_PROVIDERS = [
 ]
 
 # ── Paths ─────────────────────────────────────────────
-DATA_DIR        = os.path.join(os.path.dirname(__file__), "data")
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 UPLOADS_DIR     = os.path.join(DATA_DIR, "uploads")
 BNS_JSON        = os.path.join(DATA_DIR, "bns_sections.json")
 CASE_LAWS_JSON  = os.path.join(DATA_DIR, "case_laws.json")
