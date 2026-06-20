@@ -545,48 +545,239 @@ PIO: {pio_name}
                         st.warning(f"DOCX: {e}")
 
     with tab3:
-        st.markdown("### 📤 प्रथम/द्वितीय अपील तैयार करें")
-        appeal_type = st.radio("अपील का प्रकार", ["प्रथम अपील (धारा 19(1))", "द्वितीय अपील (धारा 19(3))"])
-        c1, c2 = st.columns(2)
-        with c1:
-            app_name = st.text_input("आवेदक का नाम", key="app_name2")
-            rti_date = st.text_input("RTI आवेदन की तारीख", placeholder="जैसे: 01/01/2025")
-            rti_subject = st.text_area("RTI में मांगी गई सूचना", height=80)
-        with c2:
-            reply_received = st.radio("जवाब मिला?", ["नहीं मिला", "अधूरा मिला", "गलत मिला", "मना किया"])
-            grievance = st.text_area("शिकायत/आधार", height=80,
-                placeholder="जैसे: 30 दिन बीत गए, कोई जवाब नहीं मिला")
+        st.markdown("### 📤 अपील तैयार करें")
 
-        if st.button("⚡ अपील तैयार करें", type="primary", use_container_width=True):
-            if not (app_name and rti_subject):
-                st.error("⚠️ जरूरी fields भरें")
-            else:
-                from modules.ai_engine import ask_ai
-                appeal_no = "19(1)" if "प्रथम" in appeal_type else "19(3)"
-                with st.spinner("AI अपील तैयार कर रहा है..."):
-                    res = ask_ai(
-                        f"""आप RTI विशेषज्ञ हैं। RTI Act 2005 की धारा {appeal_no} के अंतर्गत औपचारिक अपील हिंदी में तैयार करें।
-Format: सेवा में..., विषय:..., महोदय, पृष्ठभूमि, अपील के आधार बिंदुवार, प्रार्थना।""",
-                        f"""आवेदक: {app_name}
-RTI आवेदन तारीख: {rti_date}
-मांगी गई सूचना: {rti_subject}
-स्थिति: {reply_received}
-शिकायत: {grievance}
-अपील प्रकार: {appeal_type}"""
-                    )
-                if res["success"]:
-                    st.markdown(f"`🤖 {res['provider']}`")
-                    st.markdown("---")
-                    st.markdown(res["text"])
-                    try:
-                        from modules.docx_export import create_akhya_docx
-                        docx_bytes = create_akhya_docx(res["text"], f"{appeal_type}")
-                        st.download_button("📥 DOCX Download", data=docx_bytes,
-                            file_name="rti_appeal.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True)
-                    except Exception as e:
-                        st.warning(f"DOCX: {e}")
+        appeal_type = st.radio("अपील का प्रकार",
+            ["प्रथम अपील — धारा 19(1)", "द्वितीय अपील — प्ररूप 14 (UP SIC)"],
+            horizontal=True)
+
+        st.divider()
+
+        if "प्रथम" in appeal_type:
+            # ── प्रथम अपील ──────────────────────────────
+            st.markdown("#### प्रथम अपील — धारा 19(1) RTI Act 2005")
+            c1, c2 = st.columns(2)
+            with c1:
+                fa_name = st.text_input("आवेदक का नाम *", key="fa_name")
+                fa_address = st.text_area("आवेदक का पता *", height=70, key="fa_addr")
+                fa_dept = st.text_input("लोक प्राधिकरण/विभाग *", key="fa_dept",
+                    placeholder="जैसे: पुलिस अधीक्षक कार्यालय, श्रावस्ती")
+                fa_pio = st.text_input("लोक सूचना अधिकारी का नाम/पद", key="fa_pio")
+            with c2:
+                fa_rti_date = st.text_input("RTI आवेदन तारीख *", key="fa_date",
+                    placeholder="जैसे: 01/01/2025")
+                fa_rti_no = st.text_input("RTI आवेदन संख्या (यदि हो)", key="fa_no")
+                fa_info = st.text_area("मांगी गई सूचना *", height=70, key="fa_info",
+                    placeholder="जैसे: ACR प्रतियाँ, जाँच आदेश की प्रति")
+                fa_status = st.selectbox("क्या हुआ?", [
+                    "30 दिन में कोई जवाब नहीं मिला",
+                    "अधूरी सूचना दी गई",
+                    "सूचना देने से मना किया गया",
+                    "गलत/भ्रामक सूचना दी गई",
+                    "48 घंटे में जीवन/स्वतंत्रता संबंधी सूचना नहीं मिली"
+                ], key="fa_status")
+                fa_extra = st.text_area("अतिरिक्त तथ्य (optional)", height=60, key="fa_extra")
+
+            if st.button("⚡ प्रथम अपील तैयार करें", type="primary", use_container_width=True, key="fa_btn"):
+                if not (fa_name and fa_dept and fa_info and fa_rti_date):
+                    st.error("⚠️ * वाले fields जरूरी हैं")
+                else:
+                    from modules.ai_engine import ask_ai
+                    with st.spinner("AI प्रथम अपील तैयार कर रहा है..."):
+                        res = ask_ai(
+                            """आप RTI Act 2005 के विशेषज्ञ हैं। धारा 19(1) के अंतर्गत प्रथम अपील औपचारिक हिंदी में तैयार करें।
+Format:
+सेवा में,
+[अपीलीय प्राधिकारी]
+[विभाग]
+
+विषय: RTI Act 2005 की धारा 19(1) के अंतर्गत प्रथम अपील
+
+महोदय,
+1. पृष्ठभूमि (RTI आवेदन का विवरण)
+2. वर्तमान स्थिति (क्या हुआ)
+3. अपील के आधार (बिंदुवार — धारा 7(1), 7(2) आदि का हवाला)
+4. प्रार्थना
+
+भवदीय,
+[नाम/पता]""",
+                            f"""आवेदक: {fa_name}
+पता: {fa_address}
+विभाग: {fa_dept}
+PIO: {fa_pio}
+RTI आवेदन तारीख: {fa_rti_date}
+RTI संख्या: {fa_rti_no}
+मांगी गई सूचना: {fa_info}
+स्थिति: {fa_status}
+अतिरिक्त तथ्य: {fa_extra}"""
+                        )
+                    if res["success"]:
+                        st.markdown(f'<div class="ai-provider">🤖 {res["provider"]}</div>', unsafe_allow_html=True)
+                        st.markdown("---")
+                        appeal_text = res["text"]
+                        st.markdown(appeal_text)
+                        st.divider()
+                        try:
+                            from modules.docx_export import create_akhya_docx
+                            docx_bytes = create_akhya_docx(appeal_text, f"प्रथम अपील — {fa_dept}")
+                            st.download_button("📥 प्रथम अपील DOCX Download", data=docx_bytes,
+                                file_name="rti_pratham_appeal.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"DOCX: {e}")
+                    else:
+                        st.error(f"❌ {res['error']}")
+
+        else:
+            # ── द्वितीय अपील — प्ररूप 14 ────────────────
+            st.markdown("#### द्वितीय अपील — प्ररूप 14 | उत्तर प्रदेश राज्य सूचना आयोग")
+            st.info("📋 UP SIC में द्वितीय अपील प्ररूप-14 में दाखिल होती है — धारा 19(3) RTI Act 2005")
+
+            st.markdown("##### 🔵 आवेदक की जानकारी")
+            c1, c2 = st.columns(2)
+            with c1:
+                sa_name = st.text_input("अपीलार्थी का नाम *", key="sa_name")
+                sa_father = st.text_input("पिता/पति का नाम", key="sa_father")
+                sa_address = st.text_area("पूरा पता *", height=70, key="sa_addr",
+                    placeholder="ग्राम/मोहल्ला, थाना, जनपद, पिनकोड")
+                sa_mobile = st.text_input("मोबाइल नंबर", key="sa_mobile")
+            with c2:
+                sa_dept = st.text_input("लोक प्राधिकरण (जिसके विरुद्ध अपील) *", key="sa_dept",
+                    placeholder="जैसे: पुलिस अधीक्षक कार्यालय, श्रावस्ती")
+                sa_pio = st.text_input("लोक सूचना अधिकारी का नाम/पद", key="sa_pio")
+                sa_fao = st.text_input("प्रथम अपीलीय अधिकारी का नाम/पद", key="sa_fao")
+                sa_district = st.text_input("जनपद", key="sa_district", placeholder="जैसे: श्रावस्ती")
+
+            st.markdown("##### 🔵 RTI आवेदन का विवरण")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                sa_rti_date = st.text_input("RTI आवेदन तारीख *", key="sa_rti_date",
+                    placeholder="दि. 01/01/2025")
+                sa_rti_no = st.text_input("RTI आवेदन क्रमांक", key="sa_rti_no")
+            with c2:
+                sa_fa_date = st.text_input("प्रथम अपील तारीख", key="sa_fa_date",
+                    placeholder="दि. 01/02/2025")
+                sa_fa_no = st.text_input("प्रथम अपील क्रमांक", key="sa_fa_no")
+            with c3:
+                sa_today = st.text_input("आज की तारीख *", key="sa_today",
+                    placeholder="दि. 01/03/2025")
+                sa_fee = st.text_input("शुल्क (यदि जमा किया)", key="sa_fee",
+                    placeholder="जैसे: ₹10 IPO/DD")
+
+            st.markdown("##### 🔵 मांगी गई सूचना")
+            sa_info = st.text_area("RTI में मांगी गई सूचना का विवरण *", height=100, key="sa_info",
+                placeholder="जैसे:\n1. दिनांक xx से xx तक की वेतन पर्ची की प्रति\n2. विभागीय जाँच आदेश की प्रति\n3. ACR वर्ष 2023-24 की प्रति")
+
+            st.markdown("##### 🔵 अपील के आधार")
+            sa_ground1 = st.checkbox("✅ 30 दिन की समय सीमा में सूचना नहीं मिली — धारा 7(1)", key="sg1", value=True)
+            sa_ground2 = st.checkbox("✅ प्रथम अपील का निर्णय नहीं मिला / असंतोषजनक मिला — धारा 19(1)", key="sg2")
+            sa_ground3 = st.checkbox("✅ अधूरी/भ्रामक/गलत सूचना दी गई — धारा 18(1)(e)", key="sg3")
+            sa_ground4 = st.checkbox("✅ सूचना देने से अनुचित रूप से मना किया गया — धारा 7(8)", key="sg4")
+            sa_ground_extra = st.text_area("अन्य आधार/तथ्य (optional)", height=70, key="sa_extra",
+                placeholder="कोई विशेष परिस्थिति जो अपील को मजबूत करे")
+
+            st.markdown("##### 🔵 प्रार्थना")
+            sa_prayer1 = st.checkbox("✅ लोक सूचना अधिकारी को मांगी गई सूचना देने का निर्देश दिया जाए", key="sp1", value=True)
+            sa_prayer2 = st.checkbox("✅ लोक सूचना अधिकारी पर ₹250/दिन दंड अधिरोपित किया जाए — धारा 20(1)", key="sp2")
+            sa_prayer3 = st.checkbox("✅ विभागीय कार्रवाई की संस्तुति की जाए — धारा 20(2)", key="sp3")
+            sa_prayer4 = st.checkbox("✅ अपीलार्थी को हुई हानि का प्रतिकर दिलाया जाए — धारा 19(8)(b)", key="sp4")
+            sa_prayer_extra = st.text_input("अन्य प्रार्थना", key="sp_extra")
+
+            st.divider()
+
+            if st.button("⚡ प्ररूप-14 द्वितीय अपील तैयार करें", type="primary", use_container_width=True, key="sa_btn"):
+                if not (sa_name and sa_dept and sa_info and sa_rti_date and sa_today):
+                    st.error("⚠️ * वाले fields जरूरी हैं")
+                else:
+                    # आधार बनाएं
+                    grounds = []
+                    if sa_ground1: grounds.append("30 दिन की समय सीमा में सूचना नहीं मिली (धारा 7(1) RTI Act)")
+                    if sa_ground2: grounds.append("प्रथम अपील का निर्णय नहीं मिला / असंतोषजनक रहा (धारा 19(1) RTI Act)")
+                    if sa_ground3: grounds.append("अधूरी/भ्रामक/गलत सूचना दी गई (धारा 18(1)(e) RTI Act)")
+                    if sa_ground4: grounds.append("सूचना देने से अनुचित रूप से मना किया गया (धारा 7(8) RTI Act)")
+                    if sa_ground_extra: grounds.append(sa_ground_extra)
+
+                    prayers = []
+                    if sa_prayer1: prayers.append("लोक सूचना अधिकारी को मांगी गई सूचना देने का निर्देश दिया जाए")
+                    if sa_prayer2: prayers.append("लोक सूचना अधिकारी पर ₹250 प्रतिदिन की दर से दंड अधिरोपित किया जाए (धारा 20(1))")
+                    if sa_prayer3: prayers.append("विभागीय कार्रवाई की संस्तुति की जाए (धारा 20(2))")
+                    if sa_prayer4: prayers.append("अपीलार्थी को हुई हानि का प्रतिकर दिलाया जाए (धारा 19(8)(b))")
+                    if sa_prayer_extra: prayers.append(sa_prayer_extra)
+
+                    from modules.ai_engine import ask_ai
+                    with st.spinner("AI प्ररूप-14 द्वितीय अपील तैयार कर रहा है..."):
+                        res = ask_ai(
+                            """आप UP State Information Commission (UPSIC) के RTI विशेषज्ञ हैं।
+प्ररूप-14 के अनुसार द्वितीय अपील औपचारिक हिंदी में तैयार करें।
+
+Format (exact):
+उत्तर प्रदेश राज्य सूचना आयोग के समक्ष
+प्ररूप — 14
+[सूचना का अधिकार अधिनियम, 2005 की धारा 19(3)]
+
+द्वितीय अपील
+
+अपीलार्थी: [नाम, पता]
+विपक्षी: [लोक प्राधिकरण, PIO नाम]
+
+1. RTI आवेदन का विवरण (तारीख, क्रमांक, मांगी गई सूचना)
+2. प्रथम अपील का विवरण (यदि हो)
+3. अपील के आधार (बिंदुवार, धारा सहित)
+4. प्रार्थना (बिंदुवार)
+5. घोषणा: मैं घोषणा करता/करती हूँ कि उपरोक्त तथ्य मेरी जानकारी के अनुसार सत्य हैं।
+
+दिनांक: [तारीख]
+स्थान: [जनपद]
+अपीलार्थी के हस्ताक्षर""",
+                            f"""अपीलार्थी: {sa_name}
+पिता/पति: {sa_father}
+पता: {sa_address}
+मोबाइल: {sa_mobile}
+जनपद: {sa_district}
+
+लोक प्राधिकरण: {sa_dept}
+लोक सूचना अधिकारी: {sa_pio}
+प्रथम अपीलीय अधिकारी: {sa_fao}
+
+RTI आवेदन तारीख: {sa_rti_date}
+RTI क्रमांक: {sa_rti_no}
+प्रथम अपील तारीख: {sa_fa_date}
+प्रथम अपील क्रमांक: {sa_fa_no}
+शुल्क: {sa_fee}
+आज की तारीख: {sa_today}
+
+मांगी गई सूचना:
+{sa_info}
+
+अपील के आधार:
+{chr(10).join(f'{i+1}. {g}' for i,g in enumerate(grounds))}
+
+प्रार्थना:
+{chr(10).join(f'{i+1}. {p}' for i,p in enumerate(prayers))}"""
+                        )
+
+                    if res["success"]:
+                        st.markdown(f'<div class="ai-provider">🤖 {res["provider"]} — प्ररूप 14</div>',
+                            unsafe_allow_html=True)
+                        st.markdown("---")
+                        appeal_text = res["text"]
+                        st.markdown(appeal_text)
+                        st.divider()
+                        try:
+                            from modules.docx_export import create_akhya_docx
+                            docx_bytes = create_akhya_docx(appeal_text,
+                                f"द्वितीय अपील प्ररूप-14 | {sa_dept} | {sa_today}")
+                            st.download_button(
+                                "📥 प्ररूप-14 DOCX Download करें",
+                                data=docx_bytes,
+                                file_name=f"prarup14_dvitiy_appeal_{sa_name}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"DOCX: {e}")
+                    else:
+                        st.error(f"❌ {res['error']}")
 
 # ══════════════════════════════════════════════════════
 # PAGE: 📋 विभागीय जाँच
@@ -703,7 +894,7 @@ GOOGLE_DRIVE_FOLDER_ID=1xxxxxxxxxxxxxxxxxxx""", language="bash")
                     file_name="case_laws_backup.json",
                     mime="application/json"
                 )
-        with cl_col2:
+        with cl2:
             cl_upload = st.file_uploader("Case Laws JSON Import", type=["json"], key="cl_imp")
             if cl_upload:
                 try:
