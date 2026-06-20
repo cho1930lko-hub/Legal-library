@@ -86,6 +86,8 @@ with st.sidebar:
             "🔍 धारा खोज",
             "📚 Case Law Library",
             "⚡ जमानत विरोध आख्या",
+            "📝 RTI सहायक",
+            "📋 विभागीय जाँच",
             "📥 Google Drive Sync",
             "⚙️ Settings & API Keys",
         ],
@@ -450,6 +452,148 @@ elif page == "⚡ जमानत विरोध आख्या":
                     st.text_area("Text copy करें", akhya_text, height=300)
             else:
                 st.error(f"❌ AI Error: {res['error']}")
+
+# ══════════════════════════════════════════════════════
+# PAGE: 📝 RTI सहायक
+# ══════════════════════════════════════════════════════
+elif page == "📝 RTI सहायक":
+    st.header("📝 RTI सहायक — सूचना का अधिकार अधिनियम 2005")
+
+    import json
+    from pathlib import Path
+
+    rti_path = Path(__file__).parent / "data" / "rti_sections.json"
+    try:
+        with open(rti_path, encoding="utf-8") as f:
+            rti_data = json.load(f)
+    except:
+        rti_data = []
+
+    tab1, tab2, tab3 = st.tabs(["🔍 धारा खोजें", "✍️ RTI आवेदन बनाएं", "📤 अपील बनाएं"])
+
+    with tab1:
+        q = st.text_input("🔍 खोजें", placeholder="जैसे: अपील, दंड, 30 दिन, छूट...")
+        only_imp = st.checkbox("केवल महत्वपूर्ण धाराएं")
+        results = rti_data
+        if q:
+            results = [r for r in rti_data if
+                q.lower() in r["title"].lower() or
+                q.lower() in r["description"].lower() or
+                any(q.lower() in s.lower() for s in r["subsections"])]
+        if only_imp:
+            results = [r for r in results if r.get("important")]
+        st.caption(f"{len(results)} धाराएं मिलीं")
+        for r in results:
+            with st.expander(f"**धारा {r['section_no']}** — {r['title']} {'⭐' if r.get('important') else ''}"):
+                st.markdown(f"*{r['chapter']}*")
+                st.markdown(f"**सार:** {r['description']}")
+                st.markdown("**विवरण:**")
+                for s in r["subsections"]:
+                    st.markdown(f"• {s}")
+                if st.button(f"🤖 AI से विस्तार", key=f"rti_{r['section_no']}"):
+                    from modules.ai_engine import ask_ai
+                    with st.spinner("AI समझा रहा है..."):
+                        res = ask_ai(
+                            "आप RTI विशेषज्ञ हैं। धारा को UP Police के संदर्भ में सरल हिंदी में समझाएं।",
+                            f"धारा {r['section_no']} — {r['title']}: {r['description']}"
+                        )
+                    if res["success"]:
+                        st.markdown(f"`🤖 {res['provider']}`")
+                        st.markdown(res["text"])
+
+    with tab2:
+        st.markdown("### ✍️ RTI आवेदन तैयार करें")
+        c1, c2 = st.columns(2)
+        with c1:
+            applicant_name = st.text_input("आवेदक का नाम")
+            applicant_address = st.text_area("पता", height=80)
+            department = st.text_input("विभाग/कार्यालय", placeholder="जैसे: पुलिस अधीक्षक कार्यालय, श्रावस्ती")
+        with c2:
+            pio_name = st.text_input("लोक सूचना अधिकारी", placeholder="जैसे: जनपद पुलिस अधीक्षक")
+            info_needed = st.text_area("मांगी गई सूचना का विवरण *", height=120,
+                placeholder="जैसे:\n1. दिनांक xx से xx तक की ACR प्रतियाँ\n2. विभागीय जाँच के आदेश की प्रति")
+            purpose = st.text_input("उद्देश्य (optional)", placeholder="जैसे: व्यक्तिगत जानकारी हेतु")
+
+        if st.button("⚡ RTI आवेदन तैयार करें", type="primary", use_container_width=True):
+            if not (applicant_name and department and info_needed):
+                st.error("⚠️ नाम, विभाग और सूचना का विवरण जरूरी है")
+            else:
+                from modules.ai_engine import ask_ai
+                with st.spinner("AI आवेदन तैयार कर रहा है..."):
+                    res = ask_ai(
+                        """आप RTI विशेषज्ञ हैं। UP Police के लिए औपचारिक RTI आवेदन हिंदी में तैयार करें।
+Format: सेवा में..., विषय:..., महोदय, अनुच्छेद 1,2,3... में सूचना मांगें, धारा 6(1) RTI Act 2005 का हवाला दें, अंत में प्रार्थना।""",
+                        f"""आवेदक: {applicant_name}
+पता: {applicant_address}
+विभाग: {department}
+PIO: {pio_name}
+मांगी गई सूचना: {info_needed}
+उद्देश्य: {purpose}"""
+                    )
+                if res["success"]:
+                    st.markdown(f"`🤖 {res['provider']}`")
+                    st.markdown("---")
+                    st.markdown(res["text"])
+                    try:
+                        from modules.docx_export import create_akhya_docx
+                        docx_bytes = create_akhya_docx(res["text"], f"RTI आवेदन — {department}")
+                        st.download_button("📥 DOCX Download", data=docx_bytes,
+                            file_name="rti_avedan.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"DOCX: {e}")
+
+    with tab3:
+        st.markdown("### 📤 प्रथम/द्वितीय अपील तैयार करें")
+        appeal_type = st.radio("अपील का प्रकार", ["प्रथम अपील (धारा 19(1))", "द्वितीय अपील (धारा 19(3))"])
+        c1, c2 = st.columns(2)
+        with c1:
+            app_name = st.text_input("आवेदक का नाम", key="app_name2")
+            rti_date = st.text_input("RTI आवेदन की तारीख", placeholder="जैसे: 01/01/2025")
+            rti_subject = st.text_area("RTI में मांगी गई सूचना", height=80)
+        with c2:
+            reply_received = st.radio("जवाब मिला?", ["नहीं मिला", "अधूरा मिला", "गलत मिला", "मना किया"])
+            grievance = st.text_area("शिकायत/आधार", height=80,
+                placeholder="जैसे: 30 दिन बीत गए, कोई जवाब नहीं मिला")
+
+        if st.button("⚡ अपील तैयार करें", type="primary", use_container_width=True):
+            if not (app_name and rti_subject):
+                st.error("⚠️ जरूरी fields भरें")
+            else:
+                from modules.ai_engine import ask_ai
+                appeal_no = "19(1)" if "प्रथम" in appeal_type else "19(3)"
+                with st.spinner("AI अपील तैयार कर रहा है..."):
+                    res = ask_ai(
+                        f"""आप RTI विशेषज्ञ हैं। RTI Act 2005 की धारा {appeal_no} के अंतर्गत औपचारिक अपील हिंदी में तैयार करें।
+Format: सेवा में..., विषय:..., महोदय, पृष्ठभूमि, अपील के आधार बिंदुवार, प्रार्थना।""",
+                        f"""आवेदक: {app_name}
+RTI आवेदन तारीख: {rti_date}
+मांगी गई सूचना: {rti_subject}
+स्थिति: {reply_received}
+शिकायत: {grievance}
+अपील प्रकार: {appeal_type}"""
+                    )
+                if res["success"]:
+                    st.markdown(f"`🤖 {res['provider']}`")
+                    st.markdown("---")
+                    st.markdown(res["text"])
+                    try:
+                        from modules.docx_export import create_akhya_docx
+                        docx_bytes = create_akhya_docx(res["text"], f"{appeal_type}")
+                        st.download_button("📥 DOCX Download", data=docx_bytes,
+                            file_name="rti_appeal.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"DOCX: {e}")
+
+# ══════════════════════════════════════════════════════
+# PAGE: 📋 विभागीय जाँच
+# ══════════════════════════════════════════════════════
+elif page == "📋 विभागीय जाँच":
+    st.header("📋 विभागीय जाँच सहायक")
+    st.info("🚧 यह module अगले update में आएगा। इसमें होगा:\n\n• आरोप पत्र upload → AI जवाब\n• CCA Rules UP reference\n• DOCX export")
 
 # ══════════════════════════════════════════════════════
 # PAGE: Google Drive Sync
