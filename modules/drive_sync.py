@@ -12,9 +12,9 @@ def _get_service():
         # अपने personal Gmail को delegate करें
         # Streamlit Secrets में GOOGLE_DELEGATED_EMAIL डालें
         try:
-            delegated_email = st.secrets.get("GOOGLE_DELEGATED_EMAIL", "cho1930lko@gmail.com")
+            delegated_email = st.secrets.get("GOOGLE_DELEGATED_EMAIL", "")
         except:
-            delegated_email = os.getenv("GOOGLE_DELEGATED_EMAIL", "cho1930lko@gmail.com")
+            delegated_email = os.getenv("GOOGLE_DELEGATED_EMAIL", "")
 
         scopes = ["https://www.googleapis.com/auth/drive"]
         
@@ -35,9 +35,9 @@ class DriveSync:
     def __init__(self):
         self.service = _get_service()
         try:
-            self.folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "cho1930lko@gmail.com")
+            self.folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
         except:
-            self.folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "cho1930lko@gmail.com")
+            self.folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 
     def is_connected(self):
         return self.service is not None and bool(self.folder_id)
