@@ -35,12 +35,11 @@ class DriveSync:
             files = results.get("files",[])
             media = MediaFileUpload(local_path, mimetype="application/json")
             if files:
-                self.service.files().update(fileId=files[0]["id"], media_body=media).execute()
-            else:
                 self.service.files().create(
-                    body={"name":drive_filename,"parents":[self.folder_id]},
-                    media_body=media, fields="id"
-                ).execute()
+    body={"name":drive_filename,"parents":[self.folder_id]},
+    media_body=media, fields="id",
+    supportsAllDrives=True
+).execute()
             return True
         except Exception as e:
             st.error(f"Upload error: {e}")
