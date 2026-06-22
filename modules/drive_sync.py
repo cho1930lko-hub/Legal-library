@@ -1,112 +1,110 @@
-import json, os, io
+import json, os, base64
 import streamlit as st
 
 
-def _get_service():
+def _get_config():
     try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-
-        info = dict(st.secrets["gcp_service_account"])
-        
-        # अपने personal Gmail को delegate करें
-        # Streamlit Secrets में GOOGLE_DELEGATED_EMAIL डालें
-        try:
-            delegated_email = st.secrets.get("GOOGLE_DELEGATED_EMAIL", "")
-        except:
-            delegated_email = os.getenv("GOOGLE_DELEGATED_EMAIL", "")
-
-        scopes = ["https://www.googleapis.com/auth/drive"]
-        
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=scopes
-        )
-        
-        # अगर delegated email है तो उससे काम करो
-        if delegated_email:
-            creds = creds.with_subject(delegated_email)
-        
-        return build("drive", "v3", credentials=creds)
-    except Exception as e:
-        return None
+        token = st.secrets.get("GITHUB_TOKEN", "")
+        repo  = st.secrets.get("GITHUB_REPO", "")
+    except:
+        token = os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+    return token, repo
 
 
 class DriveSync:
+    """
+    GitHub API को database की तरह use करता है।
+    case_laws.json, cca_rules.json आदि GitHub repo के data/ folder में save होती हैं।
+    """
+
     def __init__(self):
-        self.service = _get_service()
-        try:
-            self.folder_id = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID", "")
-        except:
-            self.folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+        self.token, self.repo = _get_config()
+        self.api_base = f"https://api.github.com/repos/{self.repo}/contents/data"
+        self.headers = {
+            "Authorization": f"token {self.token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
 
     def is_connected(self):
-        return self.service is not None and bool(self.folder_id)
+        return bool(self.token) and bool(self.repo)
+
+    def _get_file_sha(self, filename):
+        """GitHub पर file का SHA लो — update के लिए जरूरी है"""
+        import requests
+        url = f"{self.api_base}/{filename}"
+        r = requests.get(url, headers=self.headers)
+        if r.status_code == 200:
+            return r.json().get("sha")
+        return None
 
     def upload_json(self, local_path, drive_filename):
+        """Local JSON file को GitHub repo के data/ folder में save करो"""
         if not self.is_connected():
             return False
         try:
-            from googleapiclient.http import MediaFileUpload
+            import requests
 
-            # File exist करती है?
-            results = self.service.files().list(
-                q=f"name='{drive_filename}' and '{self.folder_id}' in parents and trashed=false",
-                fields="files(id)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True
-            ).execute()
-            files = results.get("files", [])
+            # File का content पढ़ो
+            with open(local_path, "r", encoding="utf-8") as f:
+                content = f.read()
 
-            media = MediaFileUpload(local_path, mimetype="application/json", resumable=False)
+            # Base64 encode करो
+            encoded = base64.b64encode(content.encode("utf-8")).decode("utf-8")
 
-            if files:
-                # Update existing
-                self.service.files().update(
-                    fileId=files[0]["id"],
-                    media_body=media,
-                    supportsAllDrives=True
-                ).execute()
+            # पहले SHA लो (file exist करती है?)
+            sha = self._get_file_sha(drive_filename)
+
+            url = f"{self.api_base}/{drive_filename}"
+            payload = {
+                "message": f"Update {drive_filename} via Legal Library App",
+                "content": encoded,
+                "branch": "main"
+            }
+            if sha:
+                payload["sha"] = sha  # Update के लिए SHA जरूरी
+
+            r = requests.put(url, headers=self.headers, json=payload)
+
+            if r.status_code in [200, 201]:
+                return True
             else:
-                # Create new
-                self.service.files().create(
-                    body={"name": drive_filename, "parents": [self.folder_id]},
-                    media_body=media,
-                    fields="id",
-                    supportsAllDrives=True
-                ).execute()
-            return True
+                st.error(f"GitHub upload error: {r.status_code} — {r.json().get('message','')}")
+                return False
+
         except Exception as e:
             st.error(f"Upload error: {e}")
             return False
 
     def download_json(self, drive_filename, local_path):
+        """GitHub repo के data/ folder से JSON file download करो"""
         if not self.is_connected():
             return False
         try:
-            results = self.service.files().list(
-                q=f"name='{drive_filename}' and '{self.folder_id}' in parents and trashed=false",
-                fields="files(id)",
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True
-            ).execute()
-            files = results.get("files", [])
-            if not files:
+            import requests
+
+            url = f"{self.api_base}/{drive_filename}"
+            r = requests.get(url, headers=self.headers)
+
+            if r.status_code == 200:
+                content = base64.b64decode(r.json()["content"]).decode("utf-8")
+                with open(local_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                return True
+            else:
+                st.error(f"GitHub download error: {r.status_code}")
                 return False
 
-            fh = io.BytesIO()
-            request = self.service.files().get_media(
-                fileId=files[0]["id"],
-                supportsAllDrives=True
-            )
-            from googleapiclient.http import MediaIoBaseDownload
-            downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
-
-            with open(local_path, "wb") as f:
-                f.write(fh.getvalue())
-            return True
         except Exception as e:
             st.error(f"Download error: {e}")
             return False
+
+    def sync_all(self):
+        """सभी data files GitHub से download करो"""
+        files = ["case_laws.json", "bns_sections.json", "rti_sections.json", "cca_rules.json"]
+        results = {}
+        for f in files:
+            import os
+            local = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", f)
+            results[f] = self.download_json(f, local)
+        return results
